@@ -1,10 +1,13 @@
 import datetime
+from zoneinfo import ZoneInfo
 import random
 
 import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
+
+tz = ZoneInfo("Asia/Singapore")
 
 # Show app title and description.
 st.set_page_config(page_title="Support tickets", page_icon="🎫")
@@ -54,12 +57,18 @@ if "df" not in st.session_state:
         "Status": np.random.choice(["Open", "In Progress", "Closed"], size=100),
         "Priority": np.random.choice(["High", "Medium", "Low"], size=100),
         "Date Submitted": [
-            datetime.date(2023, 6, 1) + datetime.timedelta(days=random.randint(0, 182))
+            datetime.datetime(2025, 1, 1, 12, 0, 0) 
+            + datetime.timedelta(days=random.randint(0, 182), hours=random.randint(0, 23), minutes=random.randint(0, 59))
+            for _ in range(100)
+        ],
+        "Date Closed": [
+            datetime.datetime(2025, 1, 1, 12, 0, 0) 
+            + datetime.timedelta(days=random.randint(0, 182), hours=random.randint(0, 23), minutes=random.randint(0, 59))
             for _ in range(100)
         ],
     }
     df = pd.DataFrame(data)
-
+    
     # Save the dataframe in session state (a dictionary-like object that persists across
     # page runs). This ensures our data is persisted when the app updates.
     st.session_state.df = df
@@ -76,26 +85,30 @@ with st.form("add_ticket_form"):
     submitted = st.form_submit_button("Submit")
 
 if submitted:
+    if not issue.strip():
+        st.error("Please describe the issue before submitting the ticket.")
     # Make a dataframe for the new ticket and append it to the dataframe in session
     # state.
-    recent_ticket_number = int(max(st.session_state.df.ID).split("-")[1])
-    today = datetime.datetime.now().strftime("%m-%d-%Y")
-    df_new = pd.DataFrame(
-        [
-            {
-                "ID": f"TICKET-{recent_ticket_number+1}",
-                "Issue": issue,
-                "Status": "Open",
-                "Priority": priority,
-                "Date Submitted": today,
-            }
-        ]
-    )
+    else:
+        recent_ticket_number = int(max(st.session_state.df.ID).split("-")[1])
+        today = datetime.datetime.now(tz=tz)
+        df_new = pd.DataFrame(
+            [
+                {
+                    "ID": f"TICKET-{recent_ticket_number+1}",
+                    "Issue": issue.strip(),
+                    "Status": "Open",
+                    "Priority": priority,
+                    "Date Submitted": today,
+                    "Date Closed": None,
+                }
+            ]
+        )
 
-    # Show a little success message.
-    st.write("Ticket submitted! Here are the ticket details:")
-    st.dataframe(df_new, use_container_width=True, hide_index=True)
-    st.session_state.df = pd.concat([df_new, st.session_state.df], axis=0)
+        # Show a little success message.
+        st.write("Ticket submitted! Here are the ticket details:")
+        st.dataframe(df_new, use_container_width=True, hide_index=True)
+        st.session_state.df = pd.concat([df_new, st.session_state.df], axis=0)
 
 # Show section to view and edit existing tickets in a table.
 st.header("Existing tickets")
@@ -128,7 +141,7 @@ edited_df = st.data_editor(
         ),
     },
     # Disable editing the ID and Date Submitted columns.
-    disabled=["ID", "Date Submitted"],
+    disabled=["ID", "Date Submitted", "Date Closed"],
 )
 
 # Show some metrics and charts about the ticket.
@@ -138,8 +151,9 @@ st.header("Statistics")
 col1, col2, col3 = st.columns(3)
 num_open_tickets = len(st.session_state.df[st.session_state.df.Status == "Open"])
 col1.metric(label="Number of open tickets", value=num_open_tickets, delta=10)
-col2.metric(label="First response time (hours)", value=5.2, delta=-1.5)
+col2.metric(label="Average first response time (hours)", value=5.2, delta=-1.5)
 col3.metric(label="Average resolution time (hours)", value=16, delta=2)
+st.write(f"_*delta over the past 7 days._")
 
 # Show two Altair charts using `st.altair_chart`.
 st.write("")
